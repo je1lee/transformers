@@ -449,6 +449,33 @@ class DynamicCache(Cache):
 
         return self.key_cache[layer_idx], self.value_cache[layer_idx]
 
+    def replace(
+        self,
+        key_states: torch.Tensor,
+        value_states: torch.Tensor,
+        layer_idx: int,
+        cache_kwargs: Optional[Dict[str, Any]] = None,
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
+        """
+        Updates the cache with the new `key_states` and `value_states` for the layer `layer_idx`.
+
+        Parameters:
+            key_states (`torch.Tensor`):
+                The new key states to cache.
+            value_states (`torch.Tensor`):
+                The new value states to cache.
+            layer_idx (`int`):
+                The index of the layer to cache the states for.
+            cache_kwargs (`Dict[str, Any]`, `optional`):
+                Additional arguments for the cache subclass. No additional arguments are used in `DynamicCache`.
+
+        Return:
+            A tuple containing the updated key and value states.
+        """
+        self.key_cache[layer_idx] = key_states
+        self.value_cache[layer_idx] = value_states
+        return self.key_cache[layer_idx], self.value_cache[layer_idx]
+
     def get_seq_length(self, layer_idx: Optional[int] = 0) -> int:
         """Returns the sequence length of the cached states. A layer index can be optionally passed."""
         # TODO: deprecate this function in favor of `cache_position`
@@ -543,6 +570,12 @@ class DynamicCache(Cache):
         for layer_idx in range(len(self)):
             self.key_cache[layer_idx] = self.key_cache[layer_idx][indices, ...]
             self.value_cache[layer_idx] = self.value_cache[layer_idx][indices, ...]
+
+    def layer_batch_select_indices(self, indices: torch.Tensor, layer_idx: int):
+        """Only keep the `indices` in the batch dimension of the cache for the layer `layer_idx`."""
+        batch, heads, _, head_dim = self.key_cache[layer_idx].shape
+        self.key_cache[layer_idx] = self.key_cache[layer_idx][indices.to(self.key_cache[layer_idx].device)].view(batch, heads, -1, head_dim)
+        self.value_cache[layer_idx] = self.value_cache[layer_idx][indices.to(self.value_cache[layer_idx].device)].view(batch, heads, -1, head_dim)
 
 
 class OffloadedCache(DynamicCache):
